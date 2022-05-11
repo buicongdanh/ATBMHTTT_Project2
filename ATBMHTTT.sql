@@ -244,3 +244,88 @@ dbms_rls.add_policy(
 	statement_types => 'UPDATE, DELETE',
 	sec_relevant_cols => 'MaBN');
 END;
+
+--TC2
+--Procedure tao user ThanhTra + grant connection
+CREATE OR REPLACE PROCEDURE usp_Update_UsrThanhTra (Usr IN CHAR, Psw IN CHAR)
+AS
+	strSQL 	VARCHAR(2000);
+BEGIN
+        strSQL := 'UPDATE VAITRO=''ThanhTra'' where MANV=Usr';
+        EXECUTE IMMEDIATE (strSQL);
+END;
+--Function
+CREATE OR REPLACE PROCEDURE SELECT_ALL(Usr in CHAR)
+as
+    strSQL varchar(2000);
+begin
+    strSQL := 'SELECT * FROM HSBA, HSBA_DV, BENHNHAN, NHANVIEN, CSYT';
+    EXECUTE IMMEDIATE (strSQL);
+END;
+
+--ThanhTra duoc xem tren tat ca quan he
+execute dbms_rls.add_policy(
+	object_schema => 'BCDANH',
+	object_name => 'NHANVIEN',
+	policy_name => 'my_policy5',
+	policy_function => 'SELECT_ALL',
+	statement_types => 'SELECT'
+);
+-- Thanh tra khong co quyen them xoa sua
+execute dbms_rls.add_policy(
+	object_schema => 'BCDANH',
+	object_name => 'NHANVIEN',
+	policy_name => 'my_policy6',
+	policy_function => 'SELECT_ALL',
+	statement_types => 'UPDATE, INSERT, DELETE'
+);
+
+--Procedure tao user Nhan vien CSYT + grant connection
+CREATE OR REPLACE PROCEDURE usp_Create_UsrNhanVienCSYT (Usr IN CHAR, Psw IN CHAR)
+AS
+	strSQL 	VARCHAR(2000);
+BEGIN
+		strSQL := 'UPDATE VAITRO=''ThanhTra'' where MANV=Usr';
+        EXECUTE IMMEDIATE (strSQL);
+END;
+
+--TC3
+--sec_fucntion2
+Variable datetest number;
+BEGIN
+   Select to_char(sysdate,'DD') into :datetest
+from dual;
+END;
+
+print datetest;
+
+CREATE OR REPLACE FUNCTION sec_function2(p_schema VARCHAR2, p_obj VARCHAR2)
+RETURN VARCHAR2
+AS
+	usr VARCHAR2(100);
+    datetest number;
+BEGIN
+    if(datetest>=5) then 
+        usr := SYS_CONTEXT('USERENV', 'SESSION_USER');
+        return 'MANV = ''' || usr || '''';      
+    end if;    
+End;
+
+--Nhan vien CSYT duoc them xoa dong tren HSBA 
+BEGIN
+     dbms_rls.add_policy(
+	object_schema => 'QLBV',
+	object_name => 'HSBA',
+	policy_name => 'my_policy7',
+	policy_function => 'sec_function',
+	statement_types => 'INSERT, DELETE'
+);
+--Nhan vien CSYT duoc them xoa dong tren HSBA_DV
+BEGIN
+     dbms_rls.add_policy(
+	object_schema => 'QLBV',
+	object_name => 'HSBA_DV',
+	policy_name => 'my_policy8',
+	policy_function => 'sec_function',
+	statement_types => 'INSERT, DELETE'
+);
