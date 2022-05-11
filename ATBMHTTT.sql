@@ -123,7 +123,7 @@ BEGIN
     EXECUTE IMMEDIATE (strSQL);
 END;
 
---PROC dung de cap user/password cho cac nhanvien chua co tai khoan
+--PROC dung de cap user/password cho cac nhan vien chua co tai khoan
 CREATE OR REPLACE PROCEDURE usp_Create_NhanVien_Acc
 AS
 	CURSOR CUR IS(	SELECT MANV
@@ -150,7 +150,7 @@ BEGIN
 END;
 
 --Procedure tao user nhan vien + grant connection
-CREATE OR REPLACE PROCEDURE usp_Create_UsrNhanVien (Usr IN CHAR, Psw IN CHAR)
+CREATE OR REPLACE PROCEDURE usp_Create_UsrNhanVien (Usr IN CHAR, Psw IN CHAR, VaiTro IN CHAR)
 AS
 	strSQL 	VARCHAR(2000);
 	l_count	NUMBER;
@@ -158,8 +158,8 @@ BEGIN
 	SELECT COUNT(*) into l_count from QLBV.NHANVIEN where MANV = Usr;
 	IF l_count = 0 then
 	BEGIN
-		strSQL := 'INSERT INTO QLBV.NHANVIEN (MANV, MATKHAU) VALUES (:1, :2)';
-		EXECUTE IMMEDIATE (strSQL) USING Usr, Psw;
+		strSQL := 'INSERT INTO QLBV.NHANVIEN (MANV, MATKHAU, VAITRO) VALUES (:1, :2, :3)';
+		EXECUTE IMMEDIATE (strSQL) USING Usr, Psw, VaiTro;
         strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = TRUE';
 		EXECUTE IMMEDIATE (strSQL);
 		strSQL := 'CREATE USER ' ||Usr|| ' IDENTIFIED BY '||Psw;
@@ -265,6 +265,38 @@ dbms_rls.add_policy(
 	sec_relevant_cols => 'MaBN');
 END;
 
+--THANH TRA
+CREATE ROLE THANH_TRA
+SET ROLE THANH_TRA
+
+CREATE OR REPLACE PROCEDURE usp_Add_Thanh_Tra
+AS
+	CURSOR CUR IS(	SELECT MANV
+					FROM QLBV.NHANVIEN
+					WHERE VAITRO = 'Thanh Tra');
+	strSQL 	VARCHAR(2000);
+	ck_User int;
+	Usr 	CHAR(8);
+    
+BEGIN
+	OPEN CUR;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = TRUE';
+	EXECUTE IMMEDIATE (strSQL);
+	LOOP
+		FETCH CUR INTO Usr;
+		EXIT WHEN CUR%NOTFOUND;
+		strSQL := 'GRANT THANH_TRA TO ' ||Usr||;
+		EXECUTE IMMEDIATE (strSQL);
+	END LOOP;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
+    EXECUTE IMMEDIATE (strSQL);
+END;
+
+--Thanh tra duoc xem tren tat ca quan he
+--Nhung khong duoc them, xoa, sua
+GRANT SELECT TO THANH_TRA
+
+/*
 --TC2
 --Procedure tao user ThanhTra + grant connection
 CREATE OR REPLACE PROCEDURE usp_Update_UsrThanhTra (Usr IN CHAR, Psw IN CHAR)
@@ -274,6 +306,7 @@ BEGIN
         strSQL := 'UPDATE VAITRO=''ThanhTra'' where MANV=Usr';
         EXECUTE IMMEDIATE (strSQL);
 END;
+
 --Function
 CREATE OR REPLACE PROCEDURE SELECT_ALL(Usr in CHAR)
 as
@@ -298,16 +331,45 @@ execute dbms_rls.add_policy(
 	policy_name => 'my_policy6',
 	policy_function => 'SELECT_ALL',
 	statement_types => 'UPDATE, INSERT, DELETE'
-);
+);*/
 
---Procedure tao user Nhan vien CSYT + grant connection
+
+/*--Procedure tao user Nhan vien CSYT + grant connection
 CREATE OR REPLACE PROCEDURE usp_Create_UsrNhanVienCSYT (Usr IN CHAR, Psw IN CHAR)
 AS
 	strSQL 	VARCHAR(2000);
 BEGIN
 		strSQL := 'UPDATE VAITRO=''ThanhTra'' where MANV=Usr';
         EXECUTE IMMEDIATE (strSQL);
+END;*/
+CREATE ROLE NV_CSYT
+SET ROLE NV_CSYT
+
+CREATE OR REPLACE PROCEDURE usp_add_NhanVien_CSYT
+AS
+	CURSOR CUR IS(	SELECT MANV
+					FROM QLBV.NHANVIEN
+					WHERE VAITRO = 'Co so y te');
+	strSQL 	VARCHAR(2000);
+	ck_User int;
+	Usr 	CHAR(8);
+    
+BEGIN
+	OPEN CUR;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = TRUE';
+	EXECUTE IMMEDIATE (strSQL);
+	LOOP
+		FETCH CUR INTO Usr;
+		EXIT WHEN CUR%NOTFOUND;
+		strSQL := 'GRANT NV_CSYT TO ' ||Usr||;
+		EXECUTE IMMEDIATE (strSQL);
+	END LOOP;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
+    EXECUTE IMMEDIATE (strSQL);
 END;
+--NV CSYT duoc them, xoa dong tren HSBA + HSBA_DV
+GRANT INSERT, DELETE ON HSBA TO NV_CSYT
+GRANT INSERT, DELETE ON HSBA_DV TO NV_CSYT
 
 --TC3
 --sec_fucntion2
@@ -319,17 +381,19 @@ END;
 
 print datetest;
 
-CREATE OR REPLACE FUNCTION sec_function2(p_schema VARCHAR2, p_obj VARCHAR2)
+CREATE OR REPLACE FUNCTION between_5_27(p_schema VARCHAR2, p_obj VARCHAR2)
 RETURN VARCHAR2
 AS
 	usr VARCHAR2(100);
     datetest number;
 BEGIN
-    if(datetest>=5) then 
-        usr := SYS_CONTEXT('USERENV', 'SESSION_USER');
-        return 'MANV = ''' || usr || '''';      
+    if(datetest < 5 OR datetest > 27) then 
+        return '1=0';      
+	else
+		return '';
     end if;    
 End;
+
 
 --Nhan vien CSYT duoc them xoa dong tren HSBA 
 BEGIN
@@ -337,7 +401,7 @@ BEGIN
 	object_schema => 'QLBV',
 	object_name => 'HSBA',
 	policy_name => 'my_policy7',
-	policy_function => 'sec_function',
+	policy_function => 'between_5_27',
 	statement_types => 'INSERT, DELETE'
 );
 --Nhan vien CSYT duoc them xoa dong tren HSBA_DV
@@ -346,12 +410,40 @@ BEGIN
 	object_schema => 'QLBV',
 	object_name => 'HSBA_DV',
 	policy_name => 'my_policy8',
-	policy_function => 'sec_function',
+	policy_function => 'between_5_27',
 	statement_types => 'INSERT, DELETE'
 );
+--Tao role bac si
+CREATE ROLE BAC_SI
+SET ROLE BAC_SI
+
+--Them cac nhan vien la bac si vao role
+CREATE OR REPLACE PROCEDURE usp_add_Bac_Si
+AS
+	CURSOR CUR IS(	SELECT MANV
+					FROM QLBV.NHANVIEN
+					WHERE VAITRO = 'Bac Si');
+	strSQL 	VARCHAR(2000);
+	ck_User int;
+	Usr 	CHAR(8);
+    
+BEGIN
+	OPEN CUR;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = TRUE';
+	EXECUTE IMMEDIATE (strSQL);
+	LOOP
+		FETCH CUR INTO Usr;
+		EXIT WHEN CUR%NOTFOUND;
+		strSQL := 'GRANT BAC_SI TO ' ||Usr||;
+		EXECUTE IMMEDIATE (strSQL);
+	END LOOP;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
+    EXECUTE IMMEDIATE (strSQL);
+END;
 
 --Y bac si duwoc phep xem cac ho so benh an cuar minh chua tri
 create view qlbv.CS4_1 as select * from qlbv.hsba;
+GRANT SELECT ON qlbv.CS4_1 to BAC_SI
 
 create or replace function qlbv.TC4_1 
 (p_schema in varchar2, p_object in varchar2)
@@ -362,7 +454,9 @@ begin
     user_ := sys_context('userenv','session_user');
     return 'mabs = '''|| user_ ||'''';       
 end; 
+
 grant select on qlbv.CS4_1 to NV000090;
+
 begin dbms_rls.add_policy (object_schema => 'QLBV',
                             object_name => 'HSBA',
                             policy_name => 'policy4_1',
