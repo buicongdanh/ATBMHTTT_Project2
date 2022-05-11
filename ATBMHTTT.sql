@@ -36,7 +36,7 @@ CREATE TABLE QLBV.BENHNHAN(
 	QUANHUYEN	NVARCHAR2(20),
 	TINHTP		NVARCHAR2(50),
 	TIENSUBENH	NVARCHAR2(100),
-	TIENSUBENHGÐ	NVARCHAR2(100),
+	TIENSUBENHGÃ	NVARCHAR2(100),
 	DIUNGTHUOC	NVARCHAR2(100),
 	MATKHAU		VARCHAR2(10),
 	PRIMARY KEY(MABN)
@@ -57,13 +57,27 @@ CREATE TABLE QLBV.NHANVIEN(
 	NGAYSINH	DATE,
 	CMND		CHAR(12),
 	QUEQUAN		NVARCHAR2(50),
-	SOÐT		CHAR(10),
+	SOÃT		CHAR(10),
 	CSYT		CHAR(8),
 	VAITRO		NVARCHAR2(30),
 	CHUYENKHOA	NVARCHAR2(20),
 	MATKHAU		VARCHAR2(10),
 	PRIMARY KEY(MANV)
 )
+
+create table qlbv.khoa 
+(
+    makhoa char(8) primary key, 
+    tenkhoa nvarchar2(30)
+);
+
+create table qlbv.thongbao 
+(
+    MATB char(8) primary key, 
+    noidung varchar2(4000),
+    ngaygio date, 
+    diadiem varchar2(200)
+);
 
 ALTER TABLE QLBV.NHANVIEN ADD CONSTRAINT FK_NHANVIEN_CSYT
 FOREIGN KEY (CSYT) REFERENCES QLBV.CSYT(MACSYT);
@@ -76,6 +90,12 @@ FOREIGN KEY (MABS) REFERENCES QLBV.NHANVIEN(MANV);
 
 ALTER TABLE QLBV.HSBA ADD CONSTRAINT FK_HSBA_CSYT
 FOREIGN KEY (MACSYT) REFERENCES QLBV.CSYT(MACSYT);
+
+alter table qlbv.hsba
+add constraint fk_kh_hs foreign key (makhoa) references qlbv.khoa (makhoa);
+alter table qlbv.nhanvien 
+add constraint fk_kh_nv  foreign key (chuyenkhoa) references qlbv.khoa (makhoa);
+
 
 --PROC dung de cap user/password cho cac benh nhan chua co tai khoan
 CREATE OR REPLACE PROCEDURE usp_Create_BenhNhan_Acc
@@ -329,3 +349,160 @@ BEGIN
 	policy_function => 'sec_function',
 	statement_types => 'INSERT, DELETE'
 );
+
+--Y bac si duwoc phep xem cac ho so benh an cuar minh chua tri
+create view qlbv.CS4_1 as select * from qlbv.hsba;
+
+create or replace function qlbv.TC4_1 
+(p_schema in varchar2, p_object in varchar2)
+return varchar2
+as 
+user_ varchar2(100);
+begin
+    user_ := sys_context('userenv','session_user');
+    return 'mabs = '''|| user_ ||'''';       
+end; 
+grant select on qlbv.CS4_1 to NV000090;
+begin dbms_rls.add_policy (object_schema => 'QLBV',
+                            object_name => 'HSBA',
+                            policy_name => 'policy4_1',
+                            --function_schema => 'QLBV',
+                            policy_function => 'TC4_1',
+                            statement_types => 'select');
+end;
+
+--Y bac si duwoc phep xem cac hsba_dv ma minh da chua tri 
+create or replace function qlbv.TC4_2 
+(p_object in varchar2, p_schema in varchar2)
+return varchar2
+as 
+user_ varchar2(100);
+mahs_ varchar2(200);
+begin
+    user_ := sys_context('userenv','session_user');
+    mahs_ := '(select mahs from qlbv.hsba where mabs = ( select sys_context(''userenv'',''session_user'') from dual))';
+    return 'mahs = ' || CHR(39)||mahs_||CHR(39);
+end;
+
+grant select on qlbv.hsba_dv to NV000090;
+
+begin dbms_rls.add_policy (object_schema => 'QLBV',
+                            object_name => 'HSBA',
+                            policy_name => 'policy4_2',
+                            function_schema => 'QLBV',
+                            policy_function => 'TC4_2' );
+end;
+
+--Nhan vien nghien duoc phep xem cac ho so benh an o co so y te do co cung chuyen khoa cua nhan vien nghien cuu
+create or replace function qlbv.TC5_1 
+(p_object in varchar2, p_schema in varchar2)
+return varchar2
+as 
+user_ varchar2(100);
+macsyt_ varchar2(200); 
+makhoa_ varchar2(100);
+result_ varchar2(200);
+begin
+    user_ := sys_context('userenv','session_user');
+    macsyt_ := '(select macsyt from qlbv.nhanvien where manv = ( select sys_context(''userenv'',''session_user'') from dual))';
+    makhoa_ := '(select chuyenkhoa from qlbv.nhanvien where manv = (select sys_context(''userenv'',''session_user'') from dual))'; 
+    result_ := 'makhoa = ' || CHR(39) || makhoa_ || CHR(39) || ' and macsyt = ' || CHR(39) || macsyt_ || CHR(39); 
+    return result_; --|| ' and macsyt = ' ||CHR(39)||macsyt_||CHR(39);
+    --return 'macsyt = ' || CHR(39)||macsyt_||CHR(39);  
+end;
+
+create view qlbv.CS5_1 as select * from qlbv.hsba;
+
+begin dbms_rls.add_policy (object_schema => 'QLBV',
+                            object_name => 'CS5_1',
+                            policy_name => 'policy5_1',
+                            policy_function => 'TC5_1' );
+end; 
+
+--Nhan vien nghien cuu  duwoc pheps xem cac hsba_dv co cung co so y te va cung chuyen khoa 
+create or replace function TC5_2 (p_schema in varchar2, p_object in varchar2)
+return varchar2
+as 
+mahs_ varchar2(100);
+manv_ varchar2(100);
+begin
+    manv_ := sys_context('userenv','session_user');
+    mahs_ := '(select mahs from hsba where makhoa = (select chuyenkhoa from nhanvien where manv = ' ||manv_|| ') and macsyt = (select macsyt from nhanvien where manv = ' ||manv_|| '))';
+    return 'mahs = ' || CHR(39)||mahs_||CHR(39);
+end;
+
+create view qlbv.CS5_2 as select * from qlbv.hsba_dv;
+begin dbms_rls.add_policy (object_schema => 'QLBV',
+                            object_name => 'CS5_2',
+                            policy_name => 'policy5_2',
+                            policy_function => 'TC5_2');
+end;
+
+--cai dat cac level va nhan trong OLS 
+exec sa_sysdba.create_policy ('ACCESS_NHANVIEN','OLS_NHANVIEN');
+grant access_nhanvien_dba to QLBV;
+
+GRANT EXECUTE ON SA_COMPONENTS TO QLBV;
+
+GRANT EXECUTE ON SA_LABEL_ADMIN TO QLBV;
+
+GRANT EXECUTE ON SA_POLICY_ADMIN TO QLBV;
+
+GRANT EXECUTE ON SA_USER_ADMIN TO QLBV;
+
+GRANT EXECUTE ON CHAR_TO_LABEL TO QLBV;
+
+EXEC SA_COMPONENTS.CREATE_LEVEL('ACCESS_NHANVIEN',
+8000,
+'GDSO',
+'GIAM DOC SO');
+
+EXEC SA_COMPONENTS.CREATE_LEVEL('ACCESS_NHANVIEN',
+7000,
+'GDCSYT', 
+'GIAM DOC CO SO Y TE');
+
+EXEC SA_COMPONENTS.CREATE_LEVEL('ACCESS_NHANVIEN',
+6000,
+'BS', 
+'Y BAC SI');
+
+EXEC SA_COMPONENTS.CREATE_COMPARTMENT('ACCESS_NHANVIEN',
+1000,
+'NGOAITRU',
+'DIEU TRI NGOAI TRU');
+EXEC SA_COMPONENTS.CREATE_COMPARTMENT('ACCESS_NHANVIEN',
+2000,
+'NOI TRU',
+'DIEU TRI NOI TRU');
+EXEC SA_COMPONENTS.CREATE_COMPARTMENT('ACCESS_NHANVIEN',
+3000,
+'CS',
+'DIEU TRI CHUYEN SAU');
+
+EXEC SA_COMPONENTS.CREATE_GROUP('ACCESS_NHANVIEN',
+
+1,
+'TRUNGTAM',
+'TRUNG TAM',
+NULL);
+EXEC SA_COMPONENTS.CREATE_GROUP('ACCESS_NHANVIEN',
+2,
+'CANTRUNGTAM',
+'CAN TRUNG TAM',
+'NULL');
+EXEC SA_COMPONENTS.CREATE_GROUP('ACCESS_NHANVIEN',
+3,
+'NGOAI THANH',
+'NGOAI THANH',
+'NULL');
+
+EXEC SA_LABEL_ADMIN.CREATE_LABEL ('ACCESS_NHANVIEN',
+300,
+,'BS:CS:TRUNGTAM');
+EXEC SA_LABEL_ADMIN.CREATE_LABEL ('ACCESS_NHANVIEN',
+400,
+,'GDCSYT: NGOAITHANH');
+EXEC SA_LABEL_ADMIN.CREATE_LABEL ('ACCESS_NHANVIEN',
+500,
+,'GDSO:CANTRUNGTAM');
