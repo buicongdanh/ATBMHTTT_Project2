@@ -1,9 +1,45 @@
 alter session set "_ORACLE_SCRIPT"=true;  
-
+/*---DANH SACH CAC USER TAO DE THUC HIEN DEMO*/
+--1. QLBV
 create user QLBV identified by QLBV;
 grant all privileges to QLBV;
 connect QLBV/QLBV;
 
+--2. BN
+create user BN000001 identified by BN000001;
+GRANT CREATE SESSION TO BN000001
+CREATE ROLE BENH_NHAN
+SET ROLE BENH_NHAN
+GRANT BENH_NHAN TO BN000001
+GRANT SELECT, UPDATE ON QLBV.BENHNHAN TO BENH_NHAN
+
+--3. ThanhTra
+create user NV000003 identified by NV000003;
+GRANT CREATE SESSION TO NV000003
+CREATE ROLE THANH_TRA
+SET ROLE THANH_TRA
+GRANT THANH_TRA TO NV000003
+GRANT SELECT TO THANH_TRA
+
+--4. Y/Bac si
+create user NV000056 identified by NV000056;
+GRANT CREATE SESSION TO NV000056
+CREATE ROLE BAC_SI
+SET ROLE BAC_SI
+GRANT BAC_SI TO NV000056
+GRANT SELECT ON HSBA TO BAC_SI
+GRANT SELECT ON HSBA_DV TO BAC_SI
+
+--5. NV CSYT
+create user NV000006 identified by NV000006;
+GRANT CREATE SESSION TO NV000006
+CREATE ROLE NV_CSYT
+SET ROLE NV_CSYT
+GRANT NV_CSYT TO NV000006
+GRANT INSERT, UPDATE ON HSBA TO NV_CSYT
+GRANT INSERT, UPDATE ON HSBA_DV TO NV_CSYT
+
+--TAO BANG
 CREATE TABLE QLBV.HSBA( 
 	MAHSBA		CHAR(8),
 	MABN		CHAR(8),
@@ -79,6 +115,7 @@ create table qlbv.thongbao
     diadiem varchar2(200)
 );
 
+--KHOA NGOAI
 ALTER TABLE QLBV.NHANVIEN ADD CONSTRAINT FK_NHANVIEN_CSYT
 FOREIGN KEY (CSYT) REFERENCES QLBV.CSYT(MACSYT);
 
@@ -96,6 +133,8 @@ add constraint fk_kh_hs foreign key (makhoa) references qlbv.khoa (makhoa);
 alter table qlbv.nhanvien 
 add constraint fk_kh_nv  foreign key (chuyenkhoa) references qlbv.khoa (makhoa);
 
+CREATE ROLE BENH_NHAN
+SET ROLE BENH_NHAN
 
 --PROC dung de cap user/password cho cac benh nhan chua co tai khoan
 CREATE OR REPLACE PROCEDURE usp_Create_BenhNhan_Acc
@@ -117,6 +156,8 @@ BEGIN
 		strSQL := 'CREATE USER ' ||Usr|| ' IDENTIFIED BY '||Usr;
 		EXECUTE IMMEDIATE (strSQL);
 		strSQL := 'GRANT CREATE SESSION TO ' || USR;
+		EXECUTE IMMEDIATE (strSQL);
+		strSQL := 'GRANT BENH_NHAN TO ' || USR;
 		EXECUTE IMMEDIATE (strSQL);
 	END LOOP;
 	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
@@ -172,7 +213,7 @@ BEGIN
 END IF;
 END;
 
---Procedure tao user + grant connection
+--Procedure tao BENHNHAN + grant connection
 CREATE OR REPLACE PROCEDURE usp_Create_UsrBenhNhan (Usr IN CHAR, Psw IN CHAR)
 AS
 	strSQL 	VARCHAR(2000);
@@ -220,7 +261,7 @@ BEGIN
     END IF;
 End;
 
---POLICY
+--#TC6
 --1. NhanVien chi duoc xem va cap nhat thong tin cua ban than
 BEGIN 
 dbms_rls.add_policy (
@@ -231,19 +272,7 @@ dbms_rls.add_policy (
 	statement_types => 'SELECT, UPDATE');
 END;
 
- --2. BenhNhan chi duoc xem va cap nhat thong tin cua ban than
-BEGIN
-dbms_rls.add_policy(
-	object_schema => 'QLBV',
-	object_name => 'BENHNHAN',
-	policy_name => 'my_policy2',
-	policy_function => 'sec_function',
-	statement_types => 'SELECT, UPDATE');
-END;
-
-GRANT SELECT ON QLBV.NHANVIEN TO NV000001
-
---3. NhanVien khong duoc cap nhat truong ma cua ho
+--2. NhanVien khong duoc cap nhat truong ma cua ho
 BEGIN
 dbms_rls.add_policy(
 	object_schema => 'QLBV',
@@ -254,13 +283,59 @@ dbms_rls.add_policy(
 	sec_relevant_cols => 'MaNV');
 END;
 
---4. BENHNHAN khong duoc cap nhat truong ma cua ho
+--BENHNHAN
+CREATE OR REPLACE PROCEDURE usp_Add_Benh_Nhan
+AS
+	CURSOR CUR IS(	SELECT MANV
+					FROM QLBV.NHANVIEN
+					WHERE VAITRO = 'Benh nhan');
+	strSQL 	VARCHAR(2000);
+	ck_User int;
+	Usr 	CHAR(8);
+    
+BEGIN
+	OPEN CUR;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = TRUE';
+	EXECUTE IMMEDIATE (strSQL);
+	LOOP
+		FETCH CUR INTO Usr;
+		EXIT WHEN CUR%NOTFOUND;
+		strSQL := 'GRANT BENH_NHAN TO ' ||Usr||;
+		EXECUTE IMMEDIATE (strSQL);
+	END LOOP;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
+    EXECUTE IMMEDIATE (strSQL);
+END;
+
+--GRANT CAC QUYEN SELECT, UPDATE LEN BENHNHAN
+GRANT SELECT, UPDATE ON BENHNHAN TO BENH_NHAN
+
+CREATE OR REPLACE FUNCTION sec_function_2(p_schema VARCHAR2, p_obj VARCHAR2)
+RETURN VARCHAR2
+AS
+	usr VARCHAR2(100);
+BEGIN
+    usr := SYS_CONTEXT('USERENV', 'SESSION_USER');
+    return 'MABN = ''' || usr || '''';
+END;
+
+--1. BenhNhan chi duoc xem va cap nhat thong tin cua ban than
+BEGIN
+dbms_rls.add_policy(
+	object_schema => 'QLBV',
+	object_name => 'BENHNHAN',
+	policy_name => 'my_policy2',
+	policy_function => 'sec_function_2',
+	statement_types => 'SELECT, UPDATE');
+END;
+
+--2. BENHNHAN khong duoc cap nhat truong ma cua ho
 BEGIN
 dbms_rls.add_policy(
 	object_schema => 'QLBV',
 	object_name => 'BENHNHAN',
 	policy_name => 'my_policy4',
-	policy_function => 'sec_function',
+	policy_function => 'sec_function_2',
 	statement_types => 'UPDATE, DELETE',
 	sec_relevant_cols => 'MaBN');
 END;
@@ -285,7 +360,7 @@ BEGIN
 	LOOP
 		FETCH CUR INTO Usr;
 		EXIT WHEN CUR%NOTFOUND;
-		strSQL := 'GRANT THANH_TRA TO ' ||Usr||;
+		strSQL := 'GRANT THANH_TRA TO ' ||Usr;
 		EXECUTE IMMEDIATE (strSQL);
 	END LOOP;
 	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
@@ -342,9 +417,12 @@ BEGIN
 		strSQL := 'UPDATE VAITRO=''ThanhTra'' where MANV=Usr';
         EXECUTE IMMEDIATE (strSQL);
 END;*/
+--TC#3
+--TAO ROLE
 CREATE ROLE NV_CSYT
 SET ROLE NV_CSYT
 
+--THEM CAC NHANVIEN CO VAI TRO LA NV_CSYT
 CREATE OR REPLACE PROCEDURE usp_add_NhanVien_CSYT
 AS
 	CURSOR CUR IS(	SELECT MANV
@@ -367,16 +445,15 @@ BEGIN
 	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
     EXECUTE IMMEDIATE (strSQL);
 END;
+
 --NV CSYT duoc them, xoa dong tren HSBA + HSBA_DV
 GRANT INSERT, DELETE ON HSBA TO NV_CSYT
 GRANT INSERT, DELETE ON HSBA_DV TO NV_CSYT
 
---TC3
---sec_fucntion2
+--Ham chinh sach
 Variable datetest number;
 BEGIN
-   Select to_char(sysdate,'DD') into :datetest
-from dual;
+   Select to_char(sysdate,'DD') into :datetest from dual;
 END;
 
 print datetest;
@@ -387,6 +464,7 @@ AS
 	usr VARCHAR2(100);
     datetest number;
 BEGIN
+	Select to_char(sysdate,'DD') into :datetest from dual;
     if(datetest < 5 OR datetest > 27) then 
         return '1=0';      
 	else
@@ -394,8 +472,7 @@ BEGIN
     end if;    
 End;
 
-
---Nhan vien CSYT duoc them xoa dong tren HSBA 
+--Nhan vien CSYT duoc them xoa dong tren HSBA tu ngay 5 den ngay 27 hang thang
 BEGIN
      dbms_rls.add_policy(
 	object_schema => 'QLBV',
@@ -404,7 +481,8 @@ BEGIN
 	policy_function => 'between_5_27',
 	statement_types => 'INSERT, DELETE'
 );
---Nhan vien CSYT duoc them xoa dong tren HSBA_DV
+
+--Nhan vien CSYT duoc them xoa dong tren HSBA_DV tu ngay 5 den ngay 27 hang thang
 BEGIN
      dbms_rls.add_policy(
 	object_schema => 'QLBV',
@@ -413,6 +491,8 @@ BEGIN
 	policy_function => 'between_5_27',
 	statement_types => 'INSERT, DELETE'
 );
+
+--#TC4
 --Tao role bac si
 CREATE ROLE BAC_SI
 SET ROLE BAC_SI
@@ -422,7 +502,7 @@ CREATE OR REPLACE PROCEDURE usp_add_Bac_Si
 AS
 	CURSOR CUR IS(	SELECT MANV
 					FROM QLBV.NHANVIEN
-					WHERE VAITRO = 'Bac Si');
+					WHERE VAITRO = 'Y si/Bac si');
 	strSQL 	VARCHAR(2000);
 	ck_User int;
 	Usr 	CHAR(8);
@@ -434,7 +514,7 @@ BEGIN
 	LOOP
 		FETCH CUR INTO Usr;
 		EXIT WHEN CUR%NOTFOUND;
-		strSQL := 'GRANT BAC_SI TO ' ||Usr||;
+		strSQL := 'GRANT BAC_SI TO ' ||Usr;
 		EXECUTE IMMEDIATE (strSQL);
 	END LOOP;
 	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
@@ -487,9 +567,34 @@ begin dbms_rls.add_policy (object_schema => 'QLBV',
                             policy_function => 'TC4_2' );
 end;
 
+--#TC5
+CREATE ROLE NGHIEN_CUU
+SET ROLE NGHIEN_CUU
+
+CREATE OR REPLACE PROCEDURE usp_add_Nghien_Cuu
+AS
+	CURSOR CUR IS(	SELECT MANV
+					FROM QLBV.NHANVIEN
+					WHERE VAITRO = 'Nghien Cuu');
+	strSQL 	VARCHAR(2000);
+	ck_User int;
+	Usr 	CHAR(8);
+    
+BEGIN
+	OPEN CUR;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = TRUE';
+	EXECUTE IMMEDIATE (strSQL);
+	LOOP
+		FETCH CUR INTO Usr;
+		EXIT WHEN CUR%NOTFOUND;
+		strSQL := 'GRANT NGHIEN_CUU TO ' ||Usr;
+		EXECUTE IMMEDIATE (strSQL);
+	END LOOP;
+	strSQL := 'ALTER SESSION SET "_ORACLE_SCRIPT" = FALSE';
+    EXECUTE IMMEDIATE (strSQL);
+END;
 --Nhan vien nghien duoc phep xem cac ho so benh an o co so y te do co cung chuyen khoa cua nhan vien nghien cuu
-create or replace function qlbv.TC5_1 
-(p_object in varchar2, p_schema in varchar2)
+create or replace function qlbv.TC5_1 (p_object in varchar2, p_schema in varchar2)
 return varchar2
 as 
 user_ varchar2(100);
@@ -506,6 +611,7 @@ begin
 end;
 
 create view qlbv.CS5_1 as select * from qlbv.hsba;
+GRANT SELECT ON qlbv.CS5_1 TO NGHIEN_CUU
 
 begin dbms_rls.add_policy (object_schema => 'QLBV',
                             object_name => 'CS5_1',
@@ -513,7 +619,7 @@ begin dbms_rls.add_policy (object_schema => 'QLBV',
                             policy_function => 'TC5_1' );
 end; 
 
---Nhan vien nghien cuu  duwoc pheps xem cac hsba_dv co cung co so y te va cung chuyen khoa 
+--Nhan vien nghien cuu duoc phep xem cac hsba_dv co cung co so y te va cung chuyen khoa 
 create or replace function TC5_2 (p_schema in varchar2, p_object in varchar2)
 return varchar2
 as 
@@ -532,6 +638,9 @@ begin dbms_rls.add_policy (object_schema => 'QLBV',
                             policy_function => 'TC5_2');
 end;
 
+GRANT SELECT ON qlbv.CS5_2 TO NGHIEN_CUU
+
+--#TC7
 --cai dat cac level va nhan trong OLS 
 exec sa_sysdba.create_policy ('ACCESS_NHANVIEN','OLS_NHANVIEN');
 grant access_nhanvien_dba to QLBV;
@@ -600,3 +709,30 @@ EXEC SA_LABEL_ADMIN.CREATE_LABEL ('ACCESS_NHANVIEN',
 EXEC SA_LABEL_ADMIN.CREATE_LABEL ('ACCESS_NHANVIEN',
 500,
 ,'GDSO:CANTRUNGTAM');
+
+--audit
+AUDIT UPDATE, INSERT, DELETE
+ON QLBV.NHANVIEN
+WHENEVER SUCCESSFUL; 
+
+-- Query view DBA_AUDIT_TRAIL:
+select username, owner, obj_name,
+       action_name, sql_text from dba_audit_trail;
+       
+BEGIN
+DBMS_FGA.add_policy (
+    object_schema => 'QLBV',
+    object_name => 'NHANVIEN',
+    policy_name => 'Policy_1',
+    audit_condition => 'NULL',
+    statement_types => 'SELECT, UPDATE');
+END;
+
+BEGIN
+DBMS_FGA.drop_policy (
+    object_schema => 'QLBV',
+    object_name => 'NHANVIEN',
+    policy_name => 'Policy_1');
+END;
+
+SELECT * FROM DBA_FGA_AUDIT_TRAIL;
