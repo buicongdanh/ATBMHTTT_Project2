@@ -530,22 +530,26 @@ create or replace function qlbv.TC4_1
 return varchar2
 as 
 user_ varchar2(100);
+result_ varchar2(100);
 begin
     user_ := sys_context('userenv','session_user');
-    return 'mabs = '''|| user_ ||'''';       
+    return 'mabs = '''|| user_ ||''''; 
 end; 
 
 grant select on qlbv.CS4_1 to NV000090;
 
 begin dbms_rls.add_policy (object_schema => 'QLBV',
-                            object_name => 'HSBA',
+                            object_name => 'CS4_1',
                             policy_name => 'policy4_1',
-                            --function_schema => 'QLBV',
+                            function_schema => 'QLBV',
                             policy_function => 'TC4_1',
                             statement_types => 'select');
 end;
 
 --Y bac si duwoc phep xem cac hsba_dv ma minh da chua tri 
+create or replace view qlbv.CS4_2 as select * from qlbv.hsba_dv;
+GRANT SELECT ON qlbv.CS4_2 to BAC_SI
+
 create or replace function qlbv.TC4_2 
 (p_object in varchar2, p_schema in varchar2)
 return varchar2
@@ -555,13 +559,13 @@ mahs_ varchar2(200);
 begin
     user_ := sys_context('userenv','session_user');
     mahs_ := '(select mahs from qlbv.hsba where mabs = ( select sys_context(''userenv'',''session_user'') from dual))';
-    return 'mahs = ' || CHR(39)||mahs_||CHR(39);
+    return 'mahs in (select mahs from qlbv.hsba where mabs = ' ||CHR(39)||user_||CHR(39)|| ')';
 end;
 
 grant select on qlbv.hsba_dv to NV000090;
 
 begin dbms_rls.add_policy (object_schema => 'QLBV',
-                            object_name => 'HSBA',
+                            object_name => 'CS4_2',
                             policy_name => 'policy4_2',
                             function_schema => 'QLBV',
                             policy_function => 'TC4_2' );
@@ -594,7 +598,8 @@ BEGIN
     EXECUTE IMMEDIATE (strSQL);
 END;
 --Nhan vien nghien duoc phep xem cac ho so benh an o co so y te do co cung chuyen khoa cua nhan vien nghien cuu
-create or replace function qlbv.TC5_1 (p_object in varchar2, p_schema in varchar2)
+create or replace function qlbv.TC5_1 
+(p_object in varchar2, p_schema in varchar2)
 return varchar2
 as 
 user_ varchar2(100);
@@ -603,11 +608,10 @@ makhoa_ varchar2(100);
 result_ varchar2(200);
 begin
     user_ := sys_context('userenv','session_user');
-    macsyt_ := '(select macsyt from qlbv.nhanvien where manv = ( select sys_context(''userenv'',''session_user'') from dual))';
-    makhoa_ := '(select chuyenkhoa from qlbv.nhanvien where manv = (select sys_context(''userenv'',''session_user'') from dual))'; 
-    result_ := 'makhoa = ' || CHR(39) || makhoa_ || CHR(39) || ' and macsyt = ' || CHR(39) || macsyt_ || CHR(39); 
-    return result_; --|| ' and macsyt = ' ||CHR(39)||macsyt_||CHR(39);
-    --return 'macsyt = ' || CHR(39)||macsyt_||CHR(39);  
+    macsyt_ := '(select macsyt from qlbv.nhanvien where manv = ' ||user_|| ')';
+    makhoa_ := '(select chuyenkhoa from qlbv.nhanvien where manv = ' ||user_|| ')'; 
+    result_ := ' makhoa = (select macsyt from qlbv.nhanvien where manv = ' ||user_|| ') and macsyt = (select chuyenkhoa from qlbv.nhanvien where manv = ' ||user_|| ')';
+    return ' makhoa = (select macsyt from qlbv.nhanvien where manv = ' ||CHR(39)||user_||CHR(39)|| ') and macsyt = (select chuyenkhoa from qlbv.nhanvien where manv = ' ||CHR(39)||user_||CHR(39)|| ')'; --|| ' and macsyt = ' ||CHR(39)||macsyt_||CHR(39);
 end;
 
 create view qlbv.CS5_1 as select * from qlbv.hsba;
@@ -615,6 +619,7 @@ GRANT SELECT ON qlbv.CS5_1 TO NGHIEN_CUU
 
 begin dbms_rls.add_policy (object_schema => 'QLBV',
                             object_name => 'CS5_1',
+                            function_schema => 'QLBV',
                             policy_name => 'policy5_1',
                             policy_function => 'TC5_1' );
 end; 
@@ -623,17 +628,18 @@ end;
 create or replace function TC5_2 (p_schema in varchar2, p_object in varchar2)
 return varchar2
 as 
-mahs_ varchar2(100);
-manv_ varchar2(100);
+mahs_ varchar2(1000);
+manv_ varchar2(200);
 begin
     manv_ := sys_context('userenv','session_user');
-    mahs_ := '(select mahs from hsba where makhoa = (select chuyenkhoa from nhanvien where manv = ' ||manv_|| ') and macsyt = (select macsyt from nhanvien where manv = ' ||manv_|| '))';
-    return 'mahs = ' || CHR(39)||mahs_||CHR(39);
+    mahs_ := '(select mahs from qlbv.hsba where makhoa = (select chuyenkhoa from qlbv.nhanvien where manv = ' ||manv_|| ') and macsyt = (select macsyt from qlbv.nhanvien where manv = ' ||manv_|| '))';
+    return 'mahs in (select mahs from qlbv.hsba where makhoa = (select chuyenkhoa from qlbv.nhanvien where manv = ' ||CHR(39)||manv_||CHR(39)|| ') and macsyt = (select macsyt from qlbv.nhanvien where manv = ' ||CHR(39)||manv_||CHR(39)|| '))';
 end;
 
 create view qlbv.CS5_2 as select * from qlbv.hsba_dv;
 begin dbms_rls.add_policy (object_schema => 'QLBV',
                             object_name => 'CS5_2',
+                            function_schema => 'QLBV',
                             policy_name => 'policy5_2',
                             policy_function => 'TC5_2');
 end;
